@@ -39,7 +39,7 @@ jobs:
           persist-credentials: false
 
       - name: Use Python 3.13
-        uses: actions/setup-python@a309a2c49dfe43c7a7847e20d2eb24e677c7cfa9 # v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: '3.13'
 
