@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Install OpenTubeX for Android from its official F-Droid repository.">
+  <meta property="og:title" content="OpenTubeX F-Droid repository">
+  <meta property="og:description" content="Signed Android releases and nightly builds">
+  <meta property="og:image" content="https://fdroid.opentubex.org/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="OpenTubeX F-Droid repository">
+  <meta name="twitter:description" content="Signed Android releases and nightly builds">
+  <meta name="twitter:image" content="https://fdroid.opentubex.org/og.png">
+  <title>OpenTubeX F-Droid repository</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/code-blocks.js" defer></script>
+</head>
+<body>
+  <main>
+    <h1>OpenTubeX F-Droid repository</h1>
+    <p>
+      Install the Android app from the official
+      <a href="https://opentubex.org/">OpenTubeX</a> repository.
+      F-Droid checks the signed index and handles future updates.
+    </p>
+
+    <section class="repository-card" aria-labelledby="add-repository">
+      <div>
+        <h2 id="add-repository">Add the repository</h2>
+        <ol>
+          <li>Install F-Droid or another compatible client.</li>
+          <li>Scan the QR code, or use the button below on your Android device.</li>
+          <li>Refresh repositories, search for OpenTubeX, and install it.</li>
+        </ol>
+        <a class="primary-action" href="fdroidrepos://fdroid.opentubex.org/repo?fingerprint=99BCBB15868B41FE7263E409746D4ABCFC4D32262BEF2AB0B494BBA0929347CD">
+          Add to F-Droid
+        </a>
+      </div>
+      <img
+        class="repository-qr"
+        src="/repository-qr.svg"
+        width="232"
+        height="232"
+        alt="QR code for the signed OpenTubeX F-Droid repository"
+      >
+    </section>
+
+    <h2 id="manual-setup">Manual setup</h2>
+    <p>Paste this address into F-Droid's repository settings:</p>
+    <div class="card">
+      <pre><code class="language-shell">https://fdroid.opentubex.org/repo?fingerprint=99BCBB15868B41FE7263E409746D4ABCFC4D32262BEF2AB0B494BBA0929347CD</code></pre>
+    </div>
+
+    <h2 id="release-channels">Release channels</h2>
+    <p>
+      <strong>OpenTubeX</strong> contains signed alpha releases.
+      <strong>OpenTubeX Nightly</strong> follows the development branch and installs
+      as a separate app, so both channels can remain on the same device.
+    </p>
+
+    <h2 id="requirements">Requirements</h2>
+    <p>
+      Android 7.0 or newer is required. The current app compiles and targets
+      Android 16.
+    </p>
+
+    <p>
+      <a href="https://github.com/OpenTubeX/fdroid">Repository source and maintainer documentation</a>
+    </p>
+  </main>
+</body>
+</html>

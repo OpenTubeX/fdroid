@@ -1,0 +1,11 @@
+repo_url: https://fdroid.opentubex.org/repo
+repo_name: OpenTubeX F-Droid repository
+repo_description: Android releases and development builds of OpenTubeX
+repo_icon: repo-icon.png
+archive_older: 0
+
+keystore: repository.p12
+repo_keyalias: opentubex-fdroid
+keystorepass: { env: FDROID_KEY_STORE_PASS }
+keypass: { env: FDROID_KEY_PASS }
+keydname: CN=OpenTubeX F-Droid Repository, O=OpenTubeX

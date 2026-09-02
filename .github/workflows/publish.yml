@@ -1,0 +1,173 @@
+name: Publish F-Droid repository
+
+on:
+  repository_dispatch:
+    types: [opentubex-release, opentubex-nightly]
+  workflow_dispatch:
+    inputs:
+      releaseTag:
+        description: OpenTubeX stable or nightly release tag
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fdroid-repository
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish repository
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      id-token: write
+      pages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Use Python 3.13
+        uses: actions/setup-python@a309a2c49dfe43c7a7847e20d2eb24e677c7cfa9 # v6.2.0
+        with:
+          python-version: '3.13'
+
+      - name: Use Java 21
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install F-Droid server tools
+        run: python -m pip install --disable-pip-version-check fdroidserver==2.4.5
+
+      - name: Resolve releases
+        id: release
+        shell: bash
+        env:
+          INPUT_TAG: ${{ github.event.client_payload.tag || inputs.releaseTag }}
+        run: |
+          set -euo pipefail
+          requested_tag="$INPUT_TAG"
+          stable_tag=''
+          nightly_tag=''
+
+          if [[ "$requested_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-beta$ ]]; then
+            stable_tag="$requested_tag"
+          elif [[ "$requested_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-nightly-[0-9]+)$ ]]; then
+            nightly_tag="$requested_tag"
+          elif [[ -n "$requested_tag" ]]; then
+            echo "Expected a stable or nightly OpenTubeX tag, got: $requested_tag" >&2
+            exit 1
+          fi
+
+          if [[ -z "$stable_tag" ]]; then
+            stable_tag="$(gh release view --repo OpenTubeX/OpenTubeX --json tagName --jq .tagName)"
+          fi
+          if [[ ! "$stable_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-beta$ ]]; then
+            echo "Expected a stable tag, got: $stable_tag" >&2
+            exit 1
+          fi
+          stable_version="${BASH_REMATCH[1]}"
+
+          if [[ -z "$nightly_tag" ]]; then
+            nightly_tag="$(gh release list --repo OpenTubeX/OpenTubeX --limit 100 \
+              --json createdAt,isPrerelease,tagName \
+              --jq '[.[] | select(.isPrerelease and (.tagName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-nightly-[0-9]+$")))] | sort_by(.createdAt) | reverse | .[0].tagName // ""')"
+          fi
+
+          nightly_version=''
+          if [[ -n "$nightly_tag" ]]; then
+            if [[ ! "$nightly_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-nightly-[0-9]+)$ ]]; then
+              echo "Expected a nightly tag, got: $nightly_tag" >&2
+              exit 1
+            fi
+            nightly_version="${BASH_REMATCH[1]}"
+          fi
+
+          {
+            echo "stable_tag=$stable_tag"
+            echo "stable_version=$stable_version"
+            echo "nightly_tag=$nightly_tag"
+            echo "nightly_version=$nightly_version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download Android APKs
+        env:
+          STABLE_TAG: ${{ steps.release.outputs.stable_tag }}
+          STABLE_VERSION: ${{ steps.release.outputs.stable_version }}
+          NIGHTLY_TAG: ${{ steps.release.outputs.nightly_tag }}
+          NIGHTLY_VERSION: ${{ steps.release.outputs.nightly_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir incoming
+
+          if ! gh release download "$STABLE_TAG" \
+            --repo OpenTubeX/OpenTubeX \
+            --dir incoming \
+            --pattern "org.opentubex.app-${STABLE_VERSION}-alpha.apk"; then
+            echo "::notice title=Stable Android release unavailable::${STABLE_TAG} has no Android APK"
+          fi
+
+          if [[ -n "$NIGHTLY_TAG" ]]; then
+            if ! gh release download "$NIGHTLY_TAG" \
+              --repo OpenTubeX/OpenTubeX \
+              --dir incoming \
+              --pattern "opentubex-${NIGHTLY_VERSION}-android-universal.apk"; then
+              echo "::notice title=Nightly Android release unavailable::${NIGHTLY_TAG} has no Android APK"
+            fi
+          fi
+
+          if ! find incoming -name '*.apk' -print -quit | grep --quiet .; then
+            echo 'No published Android APK is available yet.' >&2
+            exit 1
+          fi
+
+      - name: Restore repository signing key
+        env:
+          FDROID_KEYSTORE_BASE64: ${{ secrets.FDROID_KEYSTORE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$FDROID_KEYSTORE_BASE64" ]]; then
+            echo 'FDROID_KEYSTORE_BASE64 is not configured.' >&2
+            exit 1
+          fi
+          printf '%s' "$FDROID_KEYSTORE_BASE64" | base64 --decode > repository.p12
+          chmod 600 repository.p12
+          chmod 600 config.yml
+
+      - name: Build signed F-Droid index and landing page
+        env:
+          FDROID_KEY_STORE_PASS: ${{ secrets.FDROID_KEYSTORE_PASSWORD }}
+          FDROID_KEY_PASS: ${{ secrets.FDROID_KEYSTORE_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p repo site
+          cp incoming/*.apk repo/
+          fdroid update --pretty
+          cp --recursive static/. site/
+          mv repo site/repo
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Upload repository
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+      - name: Deploy repository
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

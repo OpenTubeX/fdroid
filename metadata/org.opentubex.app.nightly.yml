@@ -1,0 +1,18 @@
+Categories:
+  - Multimedia
+License: AGPL-3.0-only
+AuthorName: OpenTubeX contributors
+WebSite: https://opentubex.org/
+SourceCode: https://github.com/OpenTubeX/OpenTubeX
+IssueTracker: https://github.com/OpenTubeX/OpenTubeX/issues
+Changelog: https://github.com/OpenTubeX/OpenTubeX/releases
+
+Name: OpenTubeX Nightly
+Summary: Development builds of OpenTubeX
+Description: |-
+  OpenTubeX Nightly contains the latest Android changes from the development
+  branch. It installs alongside the stable alpha and may be unstable.
+
+AntiFeatures:
+  NonFreeNet:
+    en-US: Videos and metadata are loaded from YouTube.

@@ -1,0 +1,21 @@
+Categories:
+  - Multimedia
+License: AGPL-3.0-only
+AuthorName: OpenTubeX contributors
+WebSite: https://opentubex.org/
+SourceCode: https://github.com/OpenTubeX/OpenTubeX
+IssueTracker: https://github.com/OpenTubeX/OpenTubeX/issues
+Changelog: https://github.com/OpenTubeX/OpenTubeX/releases
+
+Name: OpenTubeX
+Summary: Privacy-focused YouTube client
+Description: |-
+  OpenTubeX is a privacy-focused YouTube client with a direct local API,
+  subscriptions, playlists, SponsorBlock, captions, and configurable playback.
+
+  The Android app is currently an alpha. It uses the existing OpenTubeX Vue
+  interface and Shaka player inside a Capacitor shell.
+
+AntiFeatures:
+  NonFreeNet:
+    en-US: Videos and metadata are loaded from YouTube.
