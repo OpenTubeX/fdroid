@@ -1,6 +1,8 @@
 name: Publish F-Droid repository
 
 on:
+  push:
+    branches: [main]
   repository_dispatch:
     types: [opentubex-release, opentubex-nightly]
   workflow_dispatch:
@@ -129,8 +131,7 @@ jobs:
           fi
 
           if ! find incoming -name '*.apk' -print -quit | grep --quiet .; then
-            echo 'No published Android APK is available yet.' >&2
-            exit 1
+            echo '::notice title=Repository is waiting for its first APK::Publishing an empty signed index and the installation page'
           fi
 
       - name: Restore repository signing key
@@ -155,7 +156,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p repo site
-          cp incoming/*.apk repo/
+          find incoming -maxdepth 1 -type f -name '*.apk' -exec cp '{}' repo/ \;
           fdroid update --pretty
           cp --recursive static/. site/
           mv repo site/repo
