@@ -8,6 +8,10 @@ alpha package and a separately installable nightly package.
 
 Scan the QR code on the landing page, or add this signed URL to F-Droid:
 
+<p align="center">
+  <img src="static/repository-qr.svg" width="232" height="232" alt="QR code for the signed OpenTubeX F-Droid repository">
+</p>
+
 ```text
 https://fdroid.opentubex.org/repo?fingerprint=99BCBB15868B41FE7263E409746D4ABCFC4D32262BEF2AB0B494BBA0929347CD
 ```
