@@ -46,7 +46,8 @@ code { font-family: var(--font-mono); }
 .repository-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2rem; align-items: center; margin-top: 2.5rem; padding: 1.5rem; background: color-mix(in srgb, var(--surface) 90%, transparent); border: 1px solid var(--line); border-radius: 0.75rem; box-shadow: 0 0.8rem 2.5rem rgb(0 0 0 / 10%); }
 .repository-card h2 { margin-top: 0; padding-top: 0; border-top: 0; }
 .repository-card ol { margin: 1rem 0 1.5rem; padding-left: 1.3rem; }
-.repository-qr { width: min(14.5rem, 100%); height: auto; padding: 0.55rem; background: #fff; border-radius: 0.45rem; }
+/* The SVG adapts to the color scheme and retains its four-module quiet zone. */
+.repository-qr { display: block; width: min(14.5rem, 100%); height: auto; }
 .primary-action { display: inline-flex; min-height: 2.75rem; padding: 0.6rem 1rem; align-items: center; justify-content: center; color: var(--selection-text); background: var(--teal); border-radius: 0.4rem; font-weight: 600; text-decoration: none; }
 .primary-action:hover { background: var(--teal-deep); text-decoration: none; }
 strong { color: var(--ink); font-weight: 600; }
