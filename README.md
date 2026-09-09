@@ -9,7 +9,7 @@ alpha package and a separately installable nightly package.
 Scan the QR code or add the signed URL to F-Droid:
 
 <p align="center">
-  <img src="static/repository-qr.svg" width="232" height="232" alt="QR code for the signed OpenTubeX F-Droid repository">
+  <img src="static/repository-qr.svg" width="320" height="320" alt="QR code for the signed OpenTubeX F-Droid repository">
 </p>
 
 ```text
