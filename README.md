@@ -26,9 +26,12 @@ the index with the landing page to GitHub Pages.
 The APKs keep their original OpenTubeX signatures. F-Droid signs only the
 repository index, using a dedicated key stored in GitHub Actions secrets.
 
-The stable app's catalog icon lives in
-`metadata/org.opentubex.app/en-US/images/icon.png` because extracting it from
-the stable APK produces no icon. Keep this PNG in sync with the app's branding.
+The stable and nightly catalog icons live in
+`metadata/org.opentubex.app/en-US/images/icon.png` and
+`metadata/org.opentubex.app.nightly/en-US/images/icon.png` because extracting
+icons from these APKs produces no usable catalog icon. Keep both PNGs in sync
+with the app's branding. Render the nightly PNG from the application's
+`_scripts/brand/icon-nightly.svg` at 512 × 512 pixels to preserve its wrench badge.
 Publishing checks that every app has a valid icon in the generated index using
 `python scripts/check-app-icons.py`.
 
