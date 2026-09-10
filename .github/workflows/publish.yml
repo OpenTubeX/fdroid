@@ -99,10 +99,9 @@ jobs:
             nightly_version="${BASH_REMATCH[1]}"
           fi
 
-          # Stable releases also provide an APK with the nightly app ID and key.
-          # Older releases without that APK must keep the existing nightly.
+          promote_stable=false
           stable_release="$(gh release view "$stable_tag" --repo OpenTubeX/OpenTubeX --json assets,publishedAt)"
-          if jq --exit-status --arg name "opentubex-${stable_version}-android-universal.apk" \
+          if jq --exit-status --arg name "org.opentubex.app-${stable_version}-alpha.apk" \
             'any(.assets[]; .name == $name)' <<< "$stable_release" > /dev/null; then
             stable_date="$(jq --raw-output .publishedAt <<< "$stable_release")"
             nightly_date=''
@@ -110,8 +109,7 @@ jobs:
               nightly_date="$(gh release view "$nightly_tag" --repo OpenTubeX/OpenTubeX --json publishedAt --jq .publishedAt)"
             fi
             if [[ "$requested_tag" == "$stable_tag" || "$stable_date" > "$nightly_date" || "$stable_date" == "$nightly_date" ]]; then
-              nightly_tag="$stable_tag"
-              nightly_version="$stable_version"
+              promote_stable=true
             fi
           fi
 
@@ -120,6 +118,7 @@ jobs:
             echo "stable_version=$stable_version"
             echo "nightly_tag=$nightly_tag"
             echo "nightly_version=$nightly_version"
+            echo "promote_stable=$promote_stable"
           } >> "$GITHUB_OUTPUT"
 
       - name: Download Android APKs
@@ -128,6 +127,7 @@ jobs:
           STABLE_VERSION: ${{ steps.release.outputs.stable_version }}
           NIGHTLY_TAG: ${{ steps.release.outputs.nightly_tag }}
           NIGHTLY_VERSION: ${{ steps.release.outputs.nightly_version }}
+          PROMOTE_STABLE: ${{ steps.release.outputs.promote_stable }}
         shell: bash
         run: |
           set -euo pipefail
@@ -140,7 +140,7 @@ jobs:
             echo "::notice title=Stable Android release unavailable::${STABLE_TAG} has no Android APK"
           fi
 
-          if [[ -n "$NIGHTLY_TAG" ]]; then
+          if [[ "$PROMOTE_STABLE" != true && -n "$NIGHTLY_TAG" ]]; then
             if ! gh release download "$NIGHTLY_TAG" \
               --repo OpenTubeX/OpenTubeX \
               --dir incoming \
@@ -152,6 +152,52 @@ jobs:
           if ! find incoming -name '*.apk' -print -quit | grep --quiet .; then
             echo '::notice title=Repository is waiting for its first APK::Publishing an empty signed index and the installation page'
           fi
+
+      - name: Check out stable Android source
+        if: steps.release.outputs.promote_stable == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OpenTubeX/OpenTubeX
+          ref: ${{ steps.release.outputs.stable_tag }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Use Node.js 24
+        if: steps.release.outputs.promote_stable == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+
+      - name: Install pnpm
+        if: steps.release.outputs.promote_stable == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11
+          cache: false
+
+      - name: Set up Android SDK
+        if: steps.release.outputs.promote_stable == 'true'
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+
+      - name: Build stable code for nightly installations
+        if: steps.release.outputs.promote_stable == 'true'
+        working-directory: source
+        env:
+          ANDROID_VERSION_NAME: ${{ steps.release.outputs.stable_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Match stable version codes and outrank a nightly from the same commit.
+          ANDROID_VERSION_CODE="$(( $(git rev-list --count HEAD) * 2 + 1 ))"
+          export ANDROID_VERSION_CODE
+          pnpm install --frozen-lockfile
+          pnpm run capacitor:sync:android
+          ./android/gradlew --project-dir android :app:assembleNightly -PsplitApks \
+            -I ../tests/android/build-identity.init.gradle verifyBuildIdentity
+          python3 _scripts/android_apks.py android/app/build/outputs/apk/nightly promotion-apks
+          cp promotion-apks/*-universal.apk "$GITHUB_WORKSPACE/incoming/"
 
       - name: Restore repository signing key
         env:

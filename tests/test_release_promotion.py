@@ -21,7 +21,6 @@ class ReleasePromotionTest(unittest.TestCase):
             "publishedAt": "2026-09-10T12:00:00Z",
             "assets": [
                 {"name": "org.opentubex.app-0.35.0-alpha.apk"},
-                {"name": "opentubex-0.35.0-android-universal.apk"},
             ],
         }
         self.nightly = {
@@ -40,6 +39,7 @@ import sys
 
 args = sys.argv[1:]
 releases = json.loads(Path("releases.json").read_text())
+assert args[args.index("--repo") + 1] == "OpenTubeX/OpenTubeX"
 if args[:2] == ["release", "list"]:
     result = releases[1:]
 elif args[:2] == ["release", "view"]:
@@ -81,6 +81,34 @@ print(json.dumps(result))
         result = subprocess.run(["bash", "-c", download["run"]], cwd=self.directory,
                                 env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+        if outputs.get("promote_stable") == "true":
+            checkout = next(step for step in steps if step.get("name") == "Check out stable Android source")
+            self.assertEqual(checkout["with"]["repository"], "OpenTubeX/OpenTubeX")
+            self.assertEqual(checkout["with"]["ref"], "${{ steps.release.outputs.stable_tag }}")
+            self.assertEqual(checkout["with"]["fetch-depth"], 0)
+            build = next(step for step in steps if step.get("name") == "Build stable code for nightly installations")
+            source = self.directory / "source"
+            (source / "android").mkdir(parents=True)
+            (source / "bin").mkdir()
+            stubs = {
+                "bin/git": "#!/bin/sh\necho 12345\n",
+                "bin/pnpm": "#!/bin/sh\nexit 0\n",
+                "android/gradlew": '#!/bin/sh\nprintf "%s|%s|%s\\n" "$*" "$ANDROID_VERSION_CODE" "$ANDROID_VERSION_NAME" > gradle.log\n',
+                "bin/python3": '#!/bin/sh\nmkdir promotion-apks\nprintf "%s" "$STABLE_TAG" > "promotion-apks/opentubex-$ANDROID_VERSION_NAME-android-universal.apk"\n',
+            }
+            for name, script in stubs.items():
+                (source / name).write_text(script)
+                (source / name).chmod(0o755)
+            env.update(PATH=f"{source / 'bin'}:{env['PATH']}", GITHUB_WORKSPACE=str(self.directory))
+            for key, value in build.get("env", {}).items():
+                env[key] = outputs[value.removeprefix("${{ steps.release.outputs.").removesuffix(" }}")]
+            result = subprocess.run(["bash", "-c", build["run"]], cwd=source,
+                                    env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            gradle = (source / "gradle.log").read_text()
+            self.assertIn(":app:assembleNightly", gradle)
+            self.assertNotIn(":app:assembleRelease", gradle)
+            self.assertTrue(gradle.endswith("|24691|0.35.0\n"), gradle)
         return {file.name: file.read_text() for file in (self.directory / "incoming").iterdir()}
 
     def test_stable_dispatch_updates_existing_nightly_installations(self):
@@ -105,8 +133,8 @@ print(json.dumps(result))
         self.nightly = None
         self.assertIn("opentubex-0.35.0-android-universal.apk", self.publish(self.stable["tagName"]))
 
-    def test_old_stable_without_promotion_apk_keeps_existing_nightly(self):
-        self.stable["assets"].pop()
+    def test_stable_without_android_apk_keeps_existing_nightly(self):
+        self.stable["assets"] = []
         self.assertIn(self.nightly["assets"][0]["name"], self.publish())
 
 
