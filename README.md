@@ -21,7 +21,10 @@ https://fdroid.opentubex.org/repo?fingerprint=99BCBB15868B41FE7263E409746D4ABCFC
 Stable and nightly releases in `OpenTubeX/OpenTubeX` dispatch their exact tag
 to this repository. The publish workflow downloads any Android APKs for the
 latest stable and nightly releases, builds a signed F-Droid index, and deploys
-the index with the landing page to GitHub Pages.
+the index with the landing page to GitHub Pages. Stable releases also provide
+an APK with the nightly app ID and signing key, so existing nightly users receive
+the stable code without switching apps. Repository refreshes keep that promoted
+APK until a newer nightly is published.
 
 The APKs keep their original OpenTubeX signatures. F-Droid signs only the
 repository index, using a dedicated key stored in GitHub Actions secrets.

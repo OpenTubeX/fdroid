@@ -52,6 +52,9 @@ jobs:
       - name: Install F-Droid server tools
         run: python -m pip install --disable-pip-version-check fdroidserver==2.4.5
 
+      - name: Test release promotion
+        run: python -m unittest discover -s tests -v
+
       - name: Resolve releases
         id: release
         shell: bash
@@ -94,6 +97,22 @@ jobs:
               exit 1
             fi
             nightly_version="${BASH_REMATCH[1]}"
+          fi
+
+          # Stable releases also provide an APK with the nightly app ID and key.
+          # Older releases without that APK must keep the existing nightly.
+          stable_release="$(gh release view "$stable_tag" --repo OpenTubeX/OpenTubeX --json assets,publishedAt)"
+          if jq --exit-status --arg name "opentubex-${stable_version}-android-universal.apk" \
+            'any(.assets[]; .name == $name)' <<< "$stable_release" > /dev/null; then
+            stable_date="$(jq --raw-output .publishedAt <<< "$stable_release")"
+            nightly_date=''
+            if [[ -n "$nightly_tag" ]]; then
+              nightly_date="$(gh release view "$nightly_tag" --repo OpenTubeX/OpenTubeX --json publishedAt --jq .publishedAt)"
+            fi
+            if [[ "$requested_tag" == "$stable_tag" || "$stable_date" > "$nightly_date" || "$stable_date" == "$nightly_date" ]]; then
+              nightly_tag="$stable_tag"
+              nightly_version="$stable_version"
+            fi
           fi
 
           {
