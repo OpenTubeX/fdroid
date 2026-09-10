@@ -32,6 +32,7 @@ class ReleasePromotionTest(unittest.TestCase):
         }
         mock = self.directory / "gh"
         mock.write_text('''#!/usr/bin/env python3
+import fnmatch
 import json
 from pathlib import Path
 import subprocess
@@ -47,10 +48,12 @@ elif args[:2] == ["release", "view"]:
     result = next(release for release in releases if release["tagName"] == tag)
 elif args[:2] == ["release", "download"]:
     release = next(release for release in releases if release["tagName"] == args[2])
-    name = args[args.index("--pattern") + 1]
-    if name not in [asset["name"] for asset in release["assets"]]:
+    pattern = args[args.index("--pattern") + 1]
+    names = [asset["name"] for asset in release["assets"] if fnmatch.fnmatchcase(asset["name"], pattern)]
+    if not names:
         sys.exit(1)
-    (Path(args[args.index("--dir") + 1]) / name).write_text(release["tagName"])
+    for name in names:
+        (Path(args[args.index("--dir") + 1]) / name).write_text(release["tagName"])
     sys.exit(0)
 else:
     raise AssertionError(args)
@@ -94,7 +97,7 @@ print(json.dumps(result))
                 "bin/git": "#!/bin/sh\necho 12345\n",
                 "bin/pnpm": "#!/bin/sh\nexit 0\n",
                 "android/gradlew": '#!/bin/sh\nprintf "%s|%s|%s\\n" "$*" "$ANDROID_VERSION_CODE" "$ANDROID_VERSION_NAME" > gradle.log\n',
-                "bin/python3": '#!/bin/sh\nmkdir promotion-apks\nprintf "%s" "$STABLE_TAG" > "promotion-apks/opentubex-$ANDROID_VERSION_NAME-android-universal.apk"\n',
+                "bin/python3": '#!/bin/sh\nmkdir promotion-apks\nfor abi in arm64-v8a armeabi-v7a x86 x86_64 universal; do\nprintf "%s" "$STABLE_TAG" > "promotion-apks/opentubex-$ANDROID_VERSION_NAME-android-$abi.apk"\ndone\n',
             }
             for name, script in stubs.items():
                 (source / name).write_text(script)
@@ -115,8 +118,20 @@ print(json.dumps(result))
         files = self.publish(self.stable["tagName"])
         self.assertEqual(files, {
             "org.opentubex.app-0.35.0-alpha.apk": self.stable["tagName"],
-            "opentubex-0.35.0-android-universal.apk": self.stable["tagName"],
+            **{f"opentubex-0.35.0-android-{abi}.apk": self.stable["tagName"]
+               for abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64", "universal")},
         })
+
+    def test_downloads_all_stable_and_nightly_architectures(self):
+        self.nightly["publishedAt"] = "2026-09-11T12:00:00Z"
+        for abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64"):
+            self.stable["assets"].append({"name": f"org.opentubex.app-0.35.0-alpha-{abi}.apk"})
+            self.nightly["assets"].append({"name": f"opentubex-0.35.0-nightly-1234-android-{abi}.apk"})
+        expected = {asset["name"]: release["tagName"]
+                    for release in (self.stable, self.nightly) for asset in release["assets"]}
+        self.stable["assets"].append({"name": "org.opentubex.app-0.35.0-alpha.apk.sha256"})
+        self.nightly["assets"].append({"name": "opentubex-0.35.0-nightly-1234-android-arm64-v8a.apk.sha256"})
+        self.assertEqual(self.publish(self.nightly["tagName"]), expected)
 
     def test_refresh_preserves_stable_promotion(self):
         self.assertIn("opentubex-0.35.0-android-universal.apk", self.publish())

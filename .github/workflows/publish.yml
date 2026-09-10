@@ -136,7 +136,7 @@ jobs:
           if ! gh release download "$STABLE_TAG" \
             --repo OpenTubeX/OpenTubeX \
             --dir incoming \
-            --pattern "org.opentubex.app-${STABLE_VERSION}-alpha.apk"; then
+            --pattern "org.opentubex.app-${STABLE_VERSION}-alpha*.apk"; then
             echo "::notice title=Stable Android release unavailable::${STABLE_TAG} has no Android APK"
           fi
 
@@ -144,7 +144,7 @@ jobs:
             if ! gh release download "$NIGHTLY_TAG" \
               --repo OpenTubeX/OpenTubeX \
               --dir incoming \
-              --pattern "opentubex-${NIGHTLY_VERSION}-android-universal.apk"; then
+              --pattern "opentubex-${NIGHTLY_VERSION}-android-*.apk"; then
               echo "::notice title=Nightly Android release unavailable::${NIGHTLY_TAG} has no Android APK"
             fi
           fi
@@ -197,7 +197,7 @@ jobs:
           ./android/gradlew --project-dir android :app:assembleNightly -PsplitApks \
             -I ../tests/android/build-identity.init.gradle verifyBuildIdentity
           python3 _scripts/android_apks.py android/app/build/outputs/apk/nightly promotion-apks
-          cp promotion-apks/*-universal.apk "$GITHUB_WORKSPACE/incoming/"
+          cp promotion-apks/*.apk "$GITHUB_WORKSPACE/incoming/"
 
       - name: Restore repository signing key
         env:
