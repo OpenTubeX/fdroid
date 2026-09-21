@@ -12,6 +12,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ReleasePromotionTest(unittest.TestCase):
+    def test_android_setup_does_not_request_removed_tools_package(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/publish.yml").read_text())
+        steps = workflow["jobs"]["publish"]["steps"]
+        setup = next(step for step in steps
+                     if step.get("uses", "").startswith("android-actions/setup-android@"))
+        # The pinned action defaults to "tools platform-tools", but Google
+        # no longer serves the legacy "tools" package.
+        packages = setup.get("with", {}).get("packages", "tools platform-tools").split()
+        self.assertNotIn("tools", packages)
+        self.assertIn("platform-tools", packages)
+
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
