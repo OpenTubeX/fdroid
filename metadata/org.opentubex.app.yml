@@ -13,7 +13,7 @@ Description: |-
   OpenTubeX is a privacy-focused YouTube client with a direct local API,
   subscriptions, playlists, SponsorBlock, captions, and configurable playback.
 
-  The Android app is currently an alpha. It uses the existing OpenTubeX Vue
+  The Android app is released as a beta. It uses the existing OpenTubeX Vue
   interface and Shaka player inside a Capacitor shell.
 
 AntiFeatures:

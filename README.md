@@ -2,7 +2,7 @@
 
 This repository publishes signed Android packages at
 [fdroid.opentubex.org](https://fdroid.opentubex.org). It contains the stable
-alpha package and a separately installable nightly package.
+beta package and a separately installable nightly package.
 
 ## Add the repository
 

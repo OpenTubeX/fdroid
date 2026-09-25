@@ -101,7 +101,7 @@ jobs:
 
           promote_stable=false
           stable_release="$(gh release view "$stable_tag" --repo OpenTubeX/OpenTubeX --json assets,publishedAt)"
-          if jq --exit-status --arg name "org.opentubex.app-${stable_version}-alpha.apk" \
+          if jq --exit-status --arg name "org.opentubex.app-${stable_version}-beta.apk" \
             'any(.assets[]; .name == $name)' <<< "$stable_release" > /dev/null; then
             stable_date="$(jq --raw-output .publishedAt <<< "$stable_release")"
             nightly_date=''
@@ -136,7 +136,7 @@ jobs:
           if ! gh release download "$STABLE_TAG" \
             --repo OpenTubeX/OpenTubeX \
             --dir incoming \
-            --pattern "org.opentubex.app-${STABLE_VERSION}-alpha*.apk"; then
+            --pattern "org.opentubex.app-${STABLE_VERSION}-beta*.apk"; then
             echo "::notice title=Stable Android release unavailable::${STABLE_TAG} has no Android APK"
           fi
 

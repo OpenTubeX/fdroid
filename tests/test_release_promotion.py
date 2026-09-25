@@ -31,7 +31,7 @@ class ReleasePromotionTest(unittest.TestCase):
             "tagName": "v0.35.0-beta",
             "publishedAt": "2026-09-10T12:00:00Z",
             "assets": [
-                {"name": "org.opentubex.app-0.35.0-alpha.apk"},
+                {"name": "org.opentubex.app-0.35.0-beta.apk"},
             ],
         }
         self.nightly = {
@@ -128,7 +128,7 @@ print(json.dumps(result))
     def test_stable_dispatch_updates_existing_nightly_installations(self):
         files = self.publish(self.stable["tagName"])
         self.assertEqual(files, {
-            "org.opentubex.app-0.35.0-alpha.apk": self.stable["tagName"],
+            "org.opentubex.app-0.35.0-beta.apk": self.stable["tagName"],
             **{f"opentubex-0.35.0-android-{abi}.apk": self.stable["tagName"]
                for abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64", "universal")},
         })
@@ -136,11 +136,11 @@ print(json.dumps(result))
     def test_downloads_all_stable_and_nightly_architectures(self):
         self.nightly["publishedAt"] = "2026-09-11T12:00:00Z"
         for abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64"):
-            self.stable["assets"].append({"name": f"org.opentubex.app-0.35.0-alpha-{abi}.apk"})
+            self.stable["assets"].append({"name": f"org.opentubex.app-0.35.0-beta-{abi}.apk"})
             self.nightly["assets"].append({"name": f"opentubex-0.35.0-nightly-1234-android-{abi}.apk"})
         expected = {asset["name"]: release["tagName"]
                     for release in (self.stable, self.nightly) for asset in release["assets"]}
-        self.stable["assets"].append({"name": "org.opentubex.app-0.35.0-alpha.apk.sha256"})
+        self.stable["assets"].append({"name": "org.opentubex.app-0.35.0-beta.apk.sha256"})
         self.nightly["assets"].append({"name": "opentubex-0.35.0-nightly-1234-android-arm64-v8a.apk.sha256"})
         self.assertEqual(self.publish(self.nightly["tagName"]), expected)
 
