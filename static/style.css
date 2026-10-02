@@ -52,3 +52,8 @@ code { font-family: var(--font-mono); }
 .primary-action:hover { background: var(--teal-deep); text-decoration: none; }
 strong { color: var(--ink); font-weight: 600; }
 @media (max-width: 720px) { .repository-card { grid-template-columns: 1fr; } .repository-qr { justify-self: center; } }
+.channels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-block: 1.5rem; }
+.channel { padding: 1.25rem; background: var(--surface); border: 1px solid var(--line); border-radius: 0.75rem; }
+.channel img { border-radius: 0.75rem; }
+.channel h3 { margin: 0.75rem 0 0.25rem; font-family: var(--font-display); font-size: 1.2rem; }
+@media (max-width: 520px) { .channels { grid-template-columns: 1fr; } }
