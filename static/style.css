@@ -48,7 +48,7 @@ code { font-family: var(--font-mono); }
 .repository-card ol { margin: 1rem 0 1.5rem; padding-left: 1.3rem; }
 /* The SVG adapts to the color scheme and retains its four-module quiet zone. */
 .repository-qr { display: block; width: min(20rem, 100%); height: auto; }
-.primary-action { display: inline-flex; min-height: 2.75rem; padding: 0.6rem 1rem; align-items: center; justify-content: center; color: var(--selection-text); background: var(--teal); border-radius: 0.4rem; font-weight: 600; text-decoration: none; }
+.primary-action { display: inline-flex; gap: 0.6rem; min-height: 2.75rem; padding: 0.6rem 1rem; align-items: center; justify-content: center; color: var(--selection-text); background: var(--teal); border-radius: 0.4rem; font-weight: 600; text-decoration: none; }
 .primary-action:hover { background: var(--teal-deep); text-decoration: none; }
 strong { color: var(--ink); font-weight: 600; }
 @media (max-width: 720px) { .repository-card { grid-template-columns: 1fr; } .repository-qr { justify-self: center; } }
@@ -56,4 +56,9 @@ strong { color: var(--ink); font-weight: 600; }
 .channel { padding: 1.25rem; background: var(--surface); border: 1px solid var(--line); border-radius: 0.75rem; }
 .channel img { border-radius: 0.75rem; }
 .channel h3 { margin: 0.75rem 0 0.25rem; font-family: var(--font-display); font-size: 1.2rem; }
-@media (max-width: 520px) { .channels { grid-template-columns: 1fr; } }
+.source-address { display: flex; gap: 1rem; align-items: center; padding: 1rem; color: var(--code-text); background: var(--code-bg); border: 1px solid var(--line); border-radius: 0.4rem; }
+.source-address code { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 0.875rem; }
+.source-address button { display: inline-flex; gap: 0.5rem; align-items: center; justify-content: center; flex-shrink: 0; min-height: 2.75rem; padding: 0.6rem 0.8rem; color: var(--code-text); background: transparent; border: 1px solid var(--scrollbar-thumb); border-radius: 0.4rem; font: inherit; cursor: pointer; }
+.source-address button:hover { background: rgb(232 242 240 / 10%); }
+.copy-status { min-height: 1.7em; margin-block: 0.25rem; }
+@media (max-width: 520px) { .channels { grid-template-columns: 1fr; } .source-address { flex-wrap: wrap; } }
