@@ -177,11 +177,22 @@ jobs:
           version: 11
           cache: false
 
+      - name: Set up Go for the Cast sender
+        if: steps.release.outputs.promote_stable == 'true' && hashFiles('source/_scripts/cast-sender/go.mod') != ''
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: source/_scripts/cast-sender/go.mod
+          cache: false
+
       - name: Set up Android SDK
         if: steps.release.outputs.promote_stable == 'true'
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
-          packages: platform-tools
+          packages: platform-tools ndk;28.2.13676358
+
+      - name: Install Android runtime packer
+        if: steps.release.outputs.promote_stable == 'true'
+        run: sudo apt-get update && sudo apt-get install --yes 7zip
 
       - name: Build stable code for nightly installations
         if: steps.release.outputs.promote_stable == 'true'
@@ -195,6 +206,7 @@ jobs:
           ANDROID_VERSION_CODE="$(( $(git rev-list --count HEAD) * 2 + 1 ))"
           export ANDROID_VERSION_CODE
           pnpm install --frozen-lockfile
+          python3 -m unittest discover -s tests/android
           pnpm run capacitor:sync:android
           ./android/gradlew --project-dir android :app:assembleNightly -PsplitApks \
             -I ../tests/android/build-identity.init.gradle verifyBuildIdentity

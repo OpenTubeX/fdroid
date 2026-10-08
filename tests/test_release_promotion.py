@@ -12,6 +12,27 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ReleasePromotionTest(unittest.TestCase):
+    def test_promotion_provisions_native_build_dependencies(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/publish.yml").read_text())
+        steps = workflow["jobs"]["publish"]["steps"]
+        checkout = next(step for step in steps if step.get("name") == "Check out stable Android source")
+        build = next(step for step in steps if step.get("name") == "Build stable code for nightly installations")
+        setup = next(step for step in steps
+                     if step.get("uses", "").startswith("android-actions/setup-android@"))
+        self.assertIn("ndk;28.2.13676358", setup["with"]["packages"].split())
+        go = next(step for step in steps
+                  if step.get("uses", "").startswith("actions/setup-go@"))
+        self.assertEqual(go["with"]["go-version-file"], "source/_scripts/cast-sender/go.mod")
+        self.assertFalse(go["with"]["cache"])
+        self.assertIn("steps.release.outputs.promote_stable == 'true'", go["if"])
+        self.assertIn("hashFiles('source/_scripts/cast-sender/go.mod') != ''", go["if"])
+        packer = next(step for step in steps if step.get("name") == "Install Android runtime packer")
+        self.assertEqual(packer["if"], "steps.release.outputs.promote_stable == 'true'")
+        self.assertIn("install --yes 7zip", packer["run"])
+        for dependency in (setup, go, packer):
+            self.assertLess(steps.index(checkout), steps.index(dependency))
+            self.assertLess(steps.index(dependency), steps.index(build))
+
     def test_android_setup_does_not_request_removed_tools_package(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/publish.yml").read_text())
         steps = workflow["jobs"]["publish"]["steps"]
@@ -108,7 +129,19 @@ print(json.dumps(result))
                 "bin/git": "#!/bin/sh\necho 12345\n",
                 "bin/pnpm": "#!/bin/sh\nexit 0\n",
                 "android/gradlew": '#!/bin/sh\nprintf "%s|%s|%s\\n" "$*" "$ANDROID_VERSION_CODE" "$ANDROID_VERSION_NAME" > gradle.log\n',
-                "bin/python3": '#!/bin/sh\nmkdir promotion-apks\nfor abi in arm64-v8a armeabi-v7a x86 x86_64 universal; do\nprintf "%s" "$STABLE_TAG" > "promotion-apks/opentubex-$ANDROID_VERSION_NAME-android-$abi.apk"\ndone\n',
+                "bin/python3": '''#!/bin/sh
+if [ "$1" = "-m" ]; then
+    test "$*" = "-m unittest discover -s tests/android" || exit 1
+    test ! -f gradle.log || exit 1
+    touch packaging-tests-passed
+    exit 0
+fi
+test -f packaging-tests-passed || exit 1
+mkdir promotion-apks
+for abi in arm64-v8a armeabi-v7a x86 x86_64 universal; do
+    printf "%s" "$STABLE_TAG" > "promotion-apks/opentubex-$ANDROID_VERSION_NAME-android-$abi.apk"
+done
+''',
             }
             for name, script in stubs.items():
                 (source / name).write_text(script)
