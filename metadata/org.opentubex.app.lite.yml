@@ -1,0 +1,20 @@
+Categories:
+  - Multimedia
+License: AGPL-3.0-only
+AuthorName: OpenTubeX contributors
+WebSite: https://opentubex.org/
+SourceCode: https://github.com/OpenTubeX/OpenTubeX
+IssueTracker: https://github.com/OpenTubeX/OpenTubeX/issues
+Changelog: https://github.com/OpenTubeX/OpenTubeX/releases
+
+Name: OpenTubeX Lite
+Summary: Smaller OpenTubeX without downloads
+Description: |-
+  OpenTubeX Lite is a smaller build of the OpenTubeX beta for devices with
+  little storage. It leaves out yt-dlp and FFmpeg, so downloads, the yt-dlp
+  playback engine and cookie-authenticated features are unavailable. It installs
+  alongside OpenTubeX with its own settings and libraries.
+
+AntiFeatures:
+  NonFreeNet:
+    en-US: Videos and metadata are loaded from YouTube.

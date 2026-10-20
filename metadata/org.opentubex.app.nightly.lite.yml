@@ -1,0 +1,20 @@
+Categories:
+  - Multimedia
+License: AGPL-3.0-only
+AuthorName: OpenTubeX contributors
+WebSite: https://opentubex.org/
+SourceCode: https://github.com/OpenTubeX/OpenTubeX
+IssueTracker: https://github.com/OpenTubeX/OpenTubeX/issues
+Changelog: https://github.com/OpenTubeX/OpenTubeX/releases
+
+Name: OpenTubeX Nightly Lite
+Summary: Smaller development builds of OpenTubeX
+Description: |-
+  OpenTubeX Nightly Lite contains the latest Android changes from the
+  development branch without yt-dlp and FFmpeg, so downloads, the yt-dlp
+  playback engine and cookie-authenticated features are unavailable. It installs
+  alongside the other OpenTubeX apps and may be unstable.
+
+AntiFeatures:
+  NonFreeNet:
+    en-US: Videos and metadata are loaded from YouTube.

@@ -129,7 +129,7 @@ print(json.dumps(result))
             stubs = {
                 "bin/git": "#!/bin/sh\necho 12345\n",
                 "bin/pnpm": "#!/bin/sh\nexit 0\n",
-                "android/gradlew": '#!/bin/sh\nprintf "%s|%s|%s\\n" "$*" "$ANDROID_VERSION_CODE" "$ANDROID_VERSION_NAME" > gradle.log\n',
+                "android/gradlew": '#!/bin/sh\nprintf "%s|%s|%s\\n" "$*" "$ANDROID_VERSION_CODE" "$ANDROID_VERSION_NAME" >> gradle.log\n',
                 "bin/python3": '''#!/bin/sh
 if [ "$1" = "-m" ]; then
     test "$*" = "-m unittest discover -s tests/android" || exit 1
@@ -138,9 +138,11 @@ if [ "$1" = "-m" ]; then
     exit 0
 fi
 test -f packaging-tests-passed || exit 1
-mkdir promotion-apks
+mkdir "$3"
+flavor=""
+test "$4" = "--lite" && flavor="lite-"
 for abi in arm64-v8a armeabi-v7a x86 x86_64 universal; do
-    printf "%s" "$STABLE_TAG" > "promotion-apks/opentubex-$ANDROID_VERSION_NAME-android-$abi.apk"
+    printf "%s" "$STABLE_TAG" > "$3/opentubex-$ANDROID_VERSION_NAME-android-$flavor$abi.apk"
 done
 ''',
             }
@@ -153,10 +155,15 @@ done
             result = subprocess.run(["bash", "-c", build["run"]], cwd=source,
                                     env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
-            gradle = (source / "gradle.log").read_text()
-            self.assertIn(":app:assembleNightly", gradle)
-            self.assertNotIn(":app:assembleRelease", gradle)
-            self.assertTrue(gradle.endswith("|24691|0.35.0\n"), gradle)
+            gradle = (source / "gradle.log").read_text().splitlines()
+            self.assertEqual(len(gradle), 2 if outputs["stable_has_lite"] == "true" else 1)
+            for invocation in gradle:
+                self.assertIn(":app:assembleNightly -PsplitApks", invocation)
+                self.assertNotIn(":app:assembleRelease", invocation)
+                self.assertTrue(invocation.endswith("|24691|0.35.0"), invocation)
+            self.assertNotIn("-Plite", gradle[0])
+            if len(gradle) == 2:
+                self.assertIn("-Plite", gradle[1])
         return {file.name: file.read_text() for file in (self.directory / "incoming").iterdir()}
 
     def test_stable_dispatch_updates_existing_nightly_installations(self):
@@ -167,11 +174,26 @@ done
                for abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64", "universal")},
         })
 
+    def test_stable_dispatch_publishes_lite_apps(self):
+        lite = [f"org.opentubex.app-0.35.0-beta-lite{suffix}.apk"
+                for suffix in ("", "-arm64-v8a", "-armeabi-v7a", "-x86", "-x86_64")]
+        self.stable["assets"] += [{"name": name} for name in lite]
+        files = self.publish(self.stable["tagName"])
+        self.assertEqual(files, {
+            "org.opentubex.app-0.35.0-beta.apk": self.stable["tagName"],
+            **{name: self.stable["tagName"] for name in lite},
+            **{f"opentubex-0.35.0-android-{flavor}{abi}.apk": self.stable["tagName"]
+               for flavor in ("", "lite-")
+               for abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64", "universal")},
+        })
+
     def test_downloads_all_stable_and_nightly_architectures(self):
         self.nightly["publishedAt"] = "2026-09-11T12:00:00Z"
         for abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64"):
             self.stable["assets"].append({"name": f"org.opentubex.app-0.35.0-beta-{abi}.apk"})
             self.nightly["assets"].append({"name": f"opentubex-0.35.0-nightly-1234-android-{abi}.apk"})
+        for abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64", "universal"):
+            self.nightly["assets"].append({"name": f"opentubex-0.35.0-nightly-1234-android-lite-{abi}.apk"})
         expected = {asset["name"]: release["tagName"]
                     for release in (self.stable, self.nightly) for asset in release["assets"]}
         self.stable["assets"].append({"name": "org.opentubex.app-0.35.0-beta.apk.sha256"})

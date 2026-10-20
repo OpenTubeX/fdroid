@@ -100,6 +100,7 @@ jobs:
           fi
 
           promote_stable=false
+          stable_has_lite=false
           stable_release="$(gh release view "$stable_tag" --repo OpenTubeX/OpenTubeX --json assets,publishedAt)"
           if jq --exit-status --arg name "org.opentubex.app-${stable_version}-beta.apk" \
             'any(.assets[]; .name == $name)' <<< "$stable_release" > /dev/null; then
@@ -112,6 +113,11 @@ jobs:
               promote_stable=true
             fi
           fi
+          # Releases with lite APKs can also build the Nightly Lite promotion.
+          if jq --exit-status --arg name "org.opentubex.app-${stable_version}-beta-lite.apk" \
+            'any(.assets[]; .name == $name)' <<< "$stable_release" > /dev/null; then
+            stable_has_lite=true
+          fi
 
           {
             echo "stable_tag=$stable_tag"
@@ -119,6 +125,7 @@ jobs:
             echo "nightly_tag=$nightly_tag"
             echo "nightly_version=$nightly_version"
             echo "promote_stable=$promote_stable"
+            echo "stable_has_lite=$stable_has_lite"
           } >> "$GITHUB_OUTPUT"
 
       - name: Download Android APKs
@@ -199,6 +206,7 @@ jobs:
         working-directory: source
         env:
           ANDROID_VERSION_NAME: ${{ steps.release.outputs.stable_version }}
+          STABLE_HAS_LITE: ${{ steps.release.outputs.stable_has_lite }}
         shell: bash
         run: |
           set -euo pipefail
@@ -212,6 +220,12 @@ jobs:
             -I ../tests/android/build-identity.init.gradle verifyBuildIdentity
           python3 _scripts/android_apks.py android/app/build/outputs/apk/nightly promotion-apks
           cp promotion-apks/*.apk "$GITHUB_WORKSPACE/incoming/"
+          if [[ "$STABLE_HAS_LITE" == true ]]; then
+            ./android/gradlew --project-dir android :app:assembleNightly -PsplitApks -Plite \
+              -I ../tests/android/build-identity.init.gradle verifyBuildIdentity
+            python3 _scripts/android_apks.py android/app/build/outputs/apk/nightly promotion-lite-apks --lite
+            cp promotion-lite-apks/*.apk "$GITHUB_WORKSPACE/incoming/"
+          fi
 
       - name: Skip lite APKs without a Lite app ID
         # Older lite APKs reused the full app IDs and version codes, so F-Droid

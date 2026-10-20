@@ -2,7 +2,8 @@
 
 This repository publishes signed Android packages at
 [fdroid.opentubex.org](https://fdroid.opentubex.org). It contains the stable
-beta package and a separately installable nightly package.
+beta package and a separately installable nightly package, plus a Lite package
+for each channel without yt-dlp and FFmpeg.
 
 ## Add the repository
 
@@ -23,7 +24,8 @@ to this repository. The publish workflow downloads any Android APKs for the
 latest stable and nightly releases, builds a signed F-Droid index, and deploys
 the index with the landing page to GitHub Pages. When stable is newer than nightly,
 the workflow builds the stable tag with the nightly app ID and signing key, so
-existing nightly users receive the stable code without switching apps. Explicit
+existing nightly users receive the stable code without switching apps. Stable
+releases with lite APKs also promote OpenTubeX Nightly Lite this way. Explicit
 stable dispatches also promote that tag. The promoted APK is published directly
 in the signed F-Droid repository, without creating a GitHub release or adding
 extra assets to the application's stable release. Repository refreshes rebuild
@@ -32,11 +34,10 @@ that APK until a newer nightly is published.
 The APKs keep their original OpenTubeX signatures. F-Droid signs only the
 repository index, using a dedicated key stored in GitHub Actions secrets.
 
-The stable and nightly catalog icons live in
-`metadata/org.opentubex.app/en-US/images/icon.png` and
-`metadata/org.opentubex.app.nightly/en-US/images/icon.png` because extracting
-icons from these APKs produces no usable catalog icon. Keep both PNGs in sync
-with the app's branding. Render the nightly PNG from the application's
+The catalog icons live in `metadata/<package>/en-US/images/icon.png` because
+extracting icons from these APKs produces no usable catalog icon. The Lite
+packages reuse the stable and nightly icons. Keep all four PNGs in sync with the
+app's branding. Render the nightly PNG from the application's
 `_scripts/brand/icon-nightly.svg` at 512 × 512 pixels to preserve its wrench badge.
 Publishing checks that every app has a valid icon in the generated index using
 `python scripts/check-app-icons.py`.
