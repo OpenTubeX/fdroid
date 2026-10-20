@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -195,6 +196,43 @@ done
     def test_stable_without_android_apk_keeps_existing_nightly(self):
         self.stable["assets"] = []
         self.assertIn(self.nightly["assets"][0]["name"], self.publish())
+
+
+    def test_skips_lite_apks_without_a_lite_app_id(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/publish.yml").read_text())
+        steps = workflow["jobs"]["publish"]["steps"]
+        skip = next(step for step in steps if step.get("name") == "Skip lite APKs without a Lite app ID")
+        build = next(step for step in steps if step.get("name") == "Build signed F-Droid index and landing page")
+        self.assertLess(steps.index(skip), steps.index(build))
+        package = self.directory / "fdroidserver"
+        package.mkdir()
+        (package / "__init__.py").write_text("")
+        (package / "common.py").write_text(
+            "from pathlib import Path\n"
+            "config = None\n"
+            "def get_apk_id(path):\n"
+            "    return Path(path).read_text(), 1, '1'\n"
+        )
+        incoming = self.directory / "incoming"
+        incoming.mkdir()
+        apks = {
+            "opentubex-0.35.0-nightly-1234-android-arm64-v8a.apk": "org.opentubex.app.nightly",
+            "opentubex-0.35.0-nightly-1234-android-lite-arm64-v8a.apk": "org.opentubex.app.nightly",
+            "opentubex-0.35.0-nightly-1235-android-lite-x86.apk": "org.opentubex.app.nightly.lite",
+            "org.opentubex.app-0.35.0-beta-lite.apk": "org.opentubex.app",
+            "org.opentubex.app-0.35.1-beta-lite.apk": "org.opentubex.app.lite",
+        }
+        for name, app_id in apks.items():
+            (incoming / name).write_text(app_id)
+        env = dict(os.environ, PYTHONPATH=str(self.directory))
+        result = subprocess.run(["bash", "-c", skip["run"].replace("python -", f"{sys.executable} -")],
+                                cwd=self.directory, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sorted(file.name for file in incoming.iterdir()), [
+            "opentubex-0.35.0-nightly-1234-android-arm64-v8a.apk",
+            "opentubex-0.35.0-nightly-1235-android-lite-x86.apk",
+            "org.opentubex.app-0.35.1-beta-lite.apk",
+        ])
 
 
 if __name__ == "__main__":

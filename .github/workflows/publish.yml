@@ -213,6 +213,24 @@ jobs:
           python3 _scripts/android_apks.py android/app/build/outputs/apk/nightly promotion-apks
           cp promotion-apks/*.apk "$GITHUB_WORKSPACE/incoming/"
 
+      - name: Skip lite APKs without a Lite app ID
+        # Older lite APKs reused the full app IDs and version codes, so F-Droid
+        # would mix them into the full apps.
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'EOF'
+          from pathlib import Path
+          from fdroidserver import common
+
+          common.config = {}
+          for apk in sorted(Path("incoming").glob("*-lite*.apk")):
+              app_id = common.get_apk_id(str(apk))[0]
+              if not app_id.endswith(".lite"):
+                  print(f"::notice title=Skipped lite APK::{apk.name} uses {app_id}")
+                  apk.unlink()
+          EOF
+
       - name: Restore repository signing key
         env:
           FDROID_KEYSTORE_BASE64: ${{ secrets.FDROID_KEYSTORE_BASE64 }}
