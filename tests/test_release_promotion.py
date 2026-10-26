@@ -257,5 +257,45 @@ done
         ])
 
 
+class StableReleaseNotesTest(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.directory = Path(temporary.name)
+        mock = self.directory / "gh"
+        mock.write_text("""#!/bin/sh
+test "$1 $2 $3" = "api --header Accept: application/vnd.github.raw" || exit 2
+test "$4" = "repos/OpenTubeX/OpenTubeX/contents/fastlane/metadata/android/en-US/changelogs/default.txt?ref=v0.38.0-beta" || exit 2
+test -f notes.txt || exit 1
+cat notes.txt
+""")
+        mock.chmod(0o755)
+
+    def add_notes(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/publish.yml").read_text())
+        steps = workflow["jobs"]["publish"]["steps"]
+        notes = next(step for step in steps if step.get("name") == "Add stable release notes")
+        build = next(step for step in steps if step.get("name") == "Build signed F-Droid index and landing page")
+        self.assertLess(steps.index(notes), steps.index(build))
+        self.assertEqual(notes["env"]["STABLE_TAG"], "${{ steps.release.outputs.stable_tag }}")
+        env = dict(os.environ, PATH=f"{self.directory}:{os.environ['PATH']}", STABLE_TAG="v0.38.0-beta")
+        result = subprocess.run(["bash", "-c", notes["run"]], cwd=self.directory,
+                                env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result
+
+    def test_copies_the_stable_changelog_to_the_stable_apps(self):
+        (self.directory / "notes.txt").write_text("Highlights\n• Added groups\n")
+        self.add_notes()
+        for app_id in ("org.opentubex.app", "org.opentubex.app.lite"):
+            changelog = self.directory / "metadata" / app_id / "en-US" / "changelogs" / "default.txt"
+            self.assertEqual(changelog.read_text(), "Highlights\n• Added groups\n")
+        self.assertFalse((self.directory / "metadata" / "org.opentubex.app.nightly").exists())
+
+    def test_skips_releases_without_a_changelog(self):
+        result = self.add_notes()
+        self.assertIn("has no F-Droid changelog", result.stdout)
+        self.assertFalse((self.directory / "metadata").exists())
+
 if __name__ == "__main__":
     unittest.main()

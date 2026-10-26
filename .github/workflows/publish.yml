@@ -245,6 +245,24 @@ jobs:
                   apk.unlink()
           EOF
 
+      - name: Add stable release notes
+        env:
+          STABLE_TAG: ${{ steps.release.outputs.stable_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # OpenTubeX commits F-Droid's "What's new" text to each stable release tag.
+          if ! notes="$(gh api --header 'Accept: application/vnd.github.raw' \
+            "repos/OpenTubeX/OpenTubeX/contents/fastlane/metadata/android/en-US/changelogs/default.txt?ref=${STABLE_TAG}")"; then
+            echo "::notice title=Stable release notes unavailable::${STABLE_TAG} has no F-Droid changelog"
+            exit 0
+          fi
+
+          for app_id in org.opentubex.app org.opentubex.app.lite; do
+            mkdir -p "metadata/${app_id}/en-US/changelogs"
+            printf '%s\n' "$notes" > "metadata/${app_id}/en-US/changelogs/default.txt"
+          done
+
       - name: Restore repository signing key
         env:
           FDROID_KEYSTORE_BASE64: ${{ secrets.FDROID_KEYSTORE_BASE64 }}
