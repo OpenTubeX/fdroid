@@ -263,6 +263,26 @@ jobs:
             printf '%s\n' "$notes" > "metadata/${app_id}/en-US/changelogs/default.txt"
           done
 
+      - name: Add phone screenshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          # OpenTubeX refreshes these on development, and that push publishes a nightly.
+          source=fastlane/metadata/android/en-US/images/phoneScreenshots
+          screenshots="$RUNNER_TEMP/screenshots"
+          mkdir "$screenshots"
+          gh api "repos/OpenTubeX/OpenTubeX/contents/${source}?ref=development" \
+            --jq '.[] | select(.type == "file") | .name' |
+            while read -r name; do
+              gh api --header 'Accept: application/vnd.github.raw' \
+                "repos/OpenTubeX/OpenTubeX/contents/${source}/${name}?ref=development" > "${screenshots}/${name}"
+            done
+
+          for app_id in org.opentubex.app org.opentubex.app.lite org.opentubex.app.nightly org.opentubex.app.nightly.lite; do
+            mkdir -p "metadata/${app_id}/en-US/images/phoneScreenshots"
+            cp "$screenshots"/* "metadata/${app_id}/en-US/images/phoneScreenshots/"
+          done
+
       - name: Restore repository signing key
         env:
           FDROID_KEYSTORE_BASE64: ${{ secrets.FDROID_KEYSTORE_BASE64 }}

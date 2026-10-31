@@ -42,11 +42,11 @@ app's branding. Render the nightly PNG from the application's
 Publishing checks that every app has a valid icon and phone screenshots in the
 generated index using `python scripts/check-app-icons.py`.
 
-The phone screenshots live in `metadata/<package>/en-US/images/phoneScreenshots/`.
-All four packages use the same three images, copied from the dark
-`OpenTubeX{1,2,3}-mobile-dark.png` captures in the application's
-`docs/screenshots`. To refresh them, run `pnpm run screenshots:android` in the
-application repository and copy the new captures here.
+All four packages use the same phone screenshots. Publishing downloads them from
+the application's `fastlane/metadata/android/en-US/images/phoneScreenshots/` on
+`development` into each package's `metadata/<package>/en-US/images/phoneScreenshots/`.
+The application's `pnpm run screenshots:android` updates them, and pushing the
+new images publishes a nightly, which refreshes this repository.
 
 ## Maintainer setup
 
