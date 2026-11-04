@@ -3,8 +3,8 @@
 <svg width="6.46cm" height="6.46cm" viewBox="0 0 61 61" preserveAspectRatio="xMidYMid meet" version="1.1" xmlns="http://www.w3.org/2000/svg">
 	<!-- High error correction allows for the centered logo; retain the four-module quiet zone. -->
 	<style>
-		#Pattern { fill: #0b3d3e; }
-		@media (prefers-color-scheme: dark) { #Pattern { fill: #54d5ca; } }
+		#Pattern { fill: #1a1a1a; }
+		@media (prefers-color-scheme: dark) { #Pattern { fill: #ff6253; } }
 	</style>
 	<g id="QRcode">
 		<g id="Pattern" transform="translate(4,4)">
