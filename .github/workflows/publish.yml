@@ -203,6 +203,13 @@ jobs:
           pnpm install --frozen-lockfile
           python3 -m unittest discover -s tests/android
           pnpm run capacitor:sync:android
+          # The wrapper makes one attempt with a 10 s read timeout, and
+          # services.gradle.org sometimes stalls longer from GitHub runners.
+          for attempt in 1 2 3 4 5; do
+            ./android/gradlew --project-dir android --version >/dev/null && break
+            if (( attempt == 5 )); then exit 1; fi
+            sleep 30
+          done
           ./android/gradlew --project-dir android :app:assembleNightly -PsplitApks \
             -I ../tests/android/build-identity.init.gradle verifyBuildIdentity
           python3 _scripts/android_apks.py android/app/build/outputs/apk/nightly promotion-apks
