@@ -146,6 +146,8 @@ done
         if self.promoted:
             self.run_step(build, env | outputs_env(build["env"], outputs), source)
             gradle = (source / "gradle.log").read_text().splitlines()
+            # The first call only downloads the Gradle distribution.
+            self.assertTrue(gradle.pop(0).startswith("--project-dir android --version|"))
             self.assertEqual(len(gradle), 2)
             for invocation in gradle:
                 self.assertIn(":app:assembleNightly -PsplitApks", invocation)
