@@ -20,9 +20,211 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Collects the APKs without repository secrets or Pages permissions, because
+  # promoting stable runs the application's dependency installation and build.
+  prepare:
+    name: Prepare APKs
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      stable_tag: ${{ steps.release.outputs.stable_tag }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Use Python 3.14
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.14'
+
+      - name: Install F-Droid server tools
+        run: python -m pip install --disable-pip-version-check --requirement requirements.txt
+
+      - name: Test publishing
+        run: python -m unittest discover -s tests -v
+
+      - name: Resolve releases
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ github.event.client_payload.tag || inputs.releaseTag }}
+        run: |
+          set -euo pipefail
+          stable_tag=''
+          nightly_tag=''
+          if [[ "$INPUT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-beta$ ]]; then
+            stable_tag="$INPUT_TAG"
+          elif [[ "$INPUT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-nightly-[0-9]+$ ]]; then
+            nightly_tag="$INPUT_TAG"
+          elif [[ -n "$INPUT_TAG" ]]; then
+            echo "Expected a stable or nightly OpenTubeX tag, got: $INPUT_TAG" >&2
+            exit 1
+          fi
+
+          if [[ -z "$stable_tag" ]]; then
+            stable_tag="$(gh release view --repo OpenTubeX/OpenTubeX --json tagName --jq .tagName)"
+          fi
+          if [[ -z "$nightly_tag" ]]; then
+            nightly_tag="$(gh release list --repo OpenTubeX/OpenTubeX --limit 100 \
+              --json createdAt,isPrerelease,tagName \
+              --jq '[.[] | select(.isPrerelease and (.tagName | test("-nightly-")))] | sort_by(.createdAt) | last | .tagName // ""')"
+          fi
+
+          if [[ ! "$stable_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-beta$ ]]; then
+            echo "Expected a stable tag, got: $stable_tag" >&2
+            exit 1
+          fi
+          stable_version="${BASH_REMATCH[1]}"
+          if [[ ! "$nightly_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-nightly-[0-9]+)$ ]]; then
+            echo "Expected a nightly tag, got: $nightly_tag" >&2
+            exit 1
+          fi
+          nightly_version="${BASH_REMATCH[1]}"
+
+          {
+            echo "stable_tag=$stable_tag"
+            echo "stable_version=$stable_version"
+            echo "nightly_tag=$nightly_tag"
+            echo "nightly_version=$nightly_version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check out OpenTubeX
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OpenTubeX/OpenTubeX
+          ref: ${{ steps.release.outputs.stable_tag }}
+          path: source
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Compare version codes
+        id: promotion
+        working-directory: source
+        env:
+          STABLE_TAG: ${{ steps.release.outputs.stable_tag }}
+          NIGHTLY_TAG: ${{ steps.release.outputs.nightly_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Nightlies use twice their commit count as the version code. Stable
+          # releases add one, so they outrank a nightly built from the same commit.
+          stable_code="$(( $(git rev-list --count "refs/tags/$STABLE_TAG") * 2 + 1 ))"
+          nightly_code="$(( $(git rev-list --count "refs/tags/$NIGHTLY_TAG") * 2 ))"
+          promote_stable=false
+          if (( stable_code > nightly_code )); then
+            promote_stable=true
+          fi
+          echo "Stable $STABLE_TAG: $stable_code, nightly $NIGHTLY_TAG: $nightly_code, promote stable: $promote_stable"
+          {
+            echo "stable_code=$stable_code"
+            echo "promote_stable=$promote_stable"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download Android APKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STABLE_TAG: ${{ steps.release.outputs.stable_tag }}
+          STABLE_VERSION: ${{ steps.release.outputs.stable_version }}
+          NIGHTLY_TAG: ${{ steps.release.outputs.nightly_tag }}
+          NIGHTLY_VERSION: ${{ steps.release.outputs.nightly_version }}
+          PROMOTE_STABLE: ${{ steps.promotion.outputs.promote_stable }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # F-Droid installs the architecture APKs, which have higher version
+          # codes. Leaving out the universal APKs keeps the site below 1 GB.
+          stable_patterns=()
+          nightly_patterns=()
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            stable_patterns+=(--pattern "org.opentubex.app-${STABLE_VERSION}-beta-${abi}.apk")
+            stable_patterns+=(--pattern "org.opentubex.app-${STABLE_VERSION}-beta-lite-${abi}.apk")
+            nightly_patterns+=(--pattern "opentubex-${NIGHTLY_VERSION}-android-${abi}.apk")
+            nightly_patterns+=(--pattern "opentubex-${NIGHTLY_VERSION}-android-lite-${abi}.apk")
+          done
+
+          gh release download "$STABLE_TAG" --repo OpenTubeX/OpenTubeX --dir incoming "${stable_patterns[@]}"
+          if [[ "$PROMOTE_STABLE" != true ]]; then
+            gh release download "$NIGHTLY_TAG" --repo OpenTubeX/OpenTubeX --dir incoming "${nightly_patterns[@]}"
+          fi
+
+      - name: Use Java 21
+        if: steps.promotion.outputs.promote_stable == 'true'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Use Node.js 24
+        if: steps.promotion.outputs.promote_stable == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+
+      - name: Install pnpm
+        if: steps.promotion.outputs.promote_stable == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: source/package.json
+          cache: false
+
+      - name: Set up Go for the Cast sender
+        if: steps.promotion.outputs.promote_stable == 'true'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: source/_scripts/cast-sender/go.mod
+          cache: false
+
+      - name: Set up Android SDK
+        if: steps.promotion.outputs.promote_stable == 'true'
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: platform-tools ndk;28.2.13676358
+
+      - name: Install Android runtime packer
+        if: steps.promotion.outputs.promote_stable == 'true'
+        run: sudo apt-get update && sudo apt-get install --yes 7zip
+
+      - name: Build stable code for nightly installations
+        if: steps.promotion.outputs.promote_stable == 'true'
+        working-directory: source
+        env:
+          ANDROID_VERSION_CODE: ${{ steps.promotion.outputs.stable_code }}
+          ANDROID_VERSION_NAME: ${{ steps.release.outputs.stable_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          python3 -m unittest discover -s tests/android
+          pnpm run capacitor:sync:android
+          ./android/gradlew --project-dir android :app:assembleNightly -PsplitApks \
+            -I ../tests/android/build-identity.init.gradle verifyBuildIdentity
+          python3 _scripts/android_apks.py android/app/build/outputs/apk/nightly promotion-apks
+          ./android/gradlew --project-dir android :app:assembleNightly -PsplitApks -Plite \
+            -I ../tests/android/build-identity.init.gradle verifyBuildIdentity
+          python3 _scripts/android_apks.py android/app/build/outputs/apk/nightly promotion-lite-apks --lite
+          cp promotion{,-lite}-apks/*-{arm64-v8a,armeabi-v7a,x86,x86_64}.apk "$GITHUB_WORKSPACE/incoming/"
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: apks
+          path: incoming/*.apk
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
   publish:
     name: Publish repository
+    needs: prepare
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -30,18 +232,16 @@ jobs:
       contents: read
       id-token: write
       pages: write
-    env:
-      GH_TOKEN: ${{ github.token }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Use Python 3.13
+      - name: Use Python 3.14
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.13'
+          python-version: '3.14'
 
       - name: Use Java 21
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
@@ -50,220 +250,32 @@ jobs:
           java-version: 21
 
       - name: Install F-Droid server tools
-        run: python -m pip install --disable-pip-version-check fdroidserver==2.4.5
+        run: python -m pip install --disable-pip-version-check --requirement requirements.txt
 
-      - name: Test release promotion
-        run: python -m unittest discover -s tests -v
-
-      - name: Resolve releases
-        id: release
-        shell: bash
-        env:
-          INPUT_TAG: ${{ github.event.client_payload.tag || inputs.releaseTag }}
-        run: |
-          set -euo pipefail
-          requested_tag="$INPUT_TAG"
-          stable_tag=''
-          nightly_tag=''
-
-          if [[ "$requested_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-beta$ ]]; then
-            stable_tag="$requested_tag"
-          elif [[ "$requested_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-nightly-[0-9]+)$ ]]; then
-            nightly_tag="$requested_tag"
-          elif [[ -n "$requested_tag" ]]; then
-            echo "Expected a stable or nightly OpenTubeX tag, got: $requested_tag" >&2
-            exit 1
-          fi
-
-          if [[ -z "$stable_tag" ]]; then
-            stable_tag="$(gh release view --repo OpenTubeX/OpenTubeX --json tagName --jq .tagName)"
-          fi
-          if [[ ! "$stable_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-beta$ ]]; then
-            echo "Expected a stable tag, got: $stable_tag" >&2
-            exit 1
-          fi
-          stable_version="${BASH_REMATCH[1]}"
-
-          if [[ -z "$nightly_tag" ]]; then
-            nightly_tag="$(gh release list --repo OpenTubeX/OpenTubeX --limit 100 \
-              --json createdAt,isPrerelease,tagName \
-              --jq '[.[] | select(.isPrerelease and (.tagName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-nightly-[0-9]+$")))] | sort_by(.createdAt) | reverse | .[0].tagName // ""')"
-          fi
-
-          nightly_version=''
-          if [[ -n "$nightly_tag" ]]; then
-            if [[ ! "$nightly_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+-nightly-[0-9]+)$ ]]; then
-              echo "Expected a nightly tag, got: $nightly_tag" >&2
-              exit 1
-            fi
-            nightly_version="${BASH_REMATCH[1]}"
-          fi
-
-          promote_stable=false
-          stable_has_lite=false
-          stable_release="$(gh release view "$stable_tag" --repo OpenTubeX/OpenTubeX --json assets,publishedAt)"
-          if jq --exit-status --arg name "org.opentubex.app-${stable_version}-beta.apk" \
-            'any(.assets[]; .name == $name)' <<< "$stable_release" > /dev/null; then
-            stable_date="$(jq --raw-output .publishedAt <<< "$stable_release")"
-            nightly_date=''
-            if [[ -n "$nightly_tag" ]]; then
-              nightly_date="$(gh release view "$nightly_tag" --repo OpenTubeX/OpenTubeX --json publishedAt --jq .publishedAt)"
-            fi
-            if [[ "$requested_tag" == "$stable_tag" || "$stable_date" > "$nightly_date" || "$stable_date" == "$nightly_date" ]]; then
-              promote_stable=true
-            fi
-          fi
-          # Releases with lite APKs can also build the Nightly Lite promotion.
-          if jq --exit-status --arg name "org.opentubex.app-${stable_version}-beta-lite.apk" \
-            'any(.assets[]; .name == $name)' <<< "$stable_release" > /dev/null; then
-            stable_has_lite=true
-          fi
-
-          {
-            echo "stable_tag=$stable_tag"
-            echo "stable_version=$stable_version"
-            echo "nightly_tag=$nightly_tag"
-            echo "nightly_version=$nightly_version"
-            echo "promote_stable=$promote_stable"
-            echo "stable_has_lite=$stable_has_lite"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Download Android APKs
-        env:
-          STABLE_TAG: ${{ steps.release.outputs.stable_tag }}
-          STABLE_VERSION: ${{ steps.release.outputs.stable_version }}
-          NIGHTLY_TAG: ${{ steps.release.outputs.nightly_tag }}
-          NIGHTLY_VERSION: ${{ steps.release.outputs.nightly_version }}
-          PROMOTE_STABLE: ${{ steps.release.outputs.promote_stable }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir incoming
-
-          if ! gh release download "$STABLE_TAG" \
-            --repo OpenTubeX/OpenTubeX \
-            --dir incoming \
-            --pattern "org.opentubex.app-${STABLE_VERSION}-beta*.apk"; then
-            echo "::notice title=Stable Android release unavailable::${STABLE_TAG} has no Android APK"
-          fi
-
-          if [[ "$PROMOTE_STABLE" != true && -n "$NIGHTLY_TAG" ]]; then
-            if ! gh release download "$NIGHTLY_TAG" \
-              --repo OpenTubeX/OpenTubeX \
-              --dir incoming \
-              --pattern "opentubex-${NIGHTLY_VERSION}-android-*.apk"; then
-              echo "::notice title=Nightly Android release unavailable::${NIGHTLY_TAG} has no Android APK"
-            fi
-          fi
-
-          if ! find incoming -name '*.apk' -print -quit | grep --quiet .; then
-            echo '::notice title=Repository is waiting for its first APK::Publishing an empty signed index and the installation page'
-          fi
-
-      - name: Check out stable Android source
-        if: steps.release.outputs.promote_stable == 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download APKs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          repository: OpenTubeX/OpenTubeX
-          ref: ${{ steps.release.outputs.stable_tag }}
-          path: source
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Use Node.js 24
-        if: steps.release.outputs.promote_stable == 'true'
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24.x
-          package-manager-cache: false
-
-      - name: Install pnpm
-        if: steps.release.outputs.promote_stable == 'true'
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 11
-          cache: false
-
-      - name: Set up Go for the Cast sender
-        if: steps.release.outputs.promote_stable == 'true' && hashFiles('source/_scripts/cast-sender/go.mod') != ''
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: source/_scripts/cast-sender/go.mod
-          cache: false
-
-      - name: Set up Android SDK
-        if: steps.release.outputs.promote_stable == 'true'
-        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
-        with:
-          packages: platform-tools ndk;28.2.13676358
-
-      - name: Install Android runtime packer
-        if: steps.release.outputs.promote_stable == 'true'
-        run: sudo apt-get update && sudo apt-get install --yes 7zip
-
-      - name: Build stable code for nightly installations
-        if: steps.release.outputs.promote_stable == 'true'
-        working-directory: source
-        env:
-          ANDROID_VERSION_NAME: ${{ steps.release.outputs.stable_version }}
-          STABLE_HAS_LITE: ${{ steps.release.outputs.stable_has_lite }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Match stable version codes and outrank a nightly from the same commit.
-          ANDROID_VERSION_CODE="$(( $(git rev-list --count HEAD) * 2 + 1 ))"
-          export ANDROID_VERSION_CODE
-          pnpm install --frozen-lockfile
-          python3 -m unittest discover -s tests/android
-          pnpm run capacitor:sync:android
-          ./android/gradlew --project-dir android :app:assembleNightly -PsplitApks \
-            -I ../tests/android/build-identity.init.gradle verifyBuildIdentity
-          python3 _scripts/android_apks.py android/app/build/outputs/apk/nightly promotion-apks
-          cp promotion-apks/*.apk "$GITHUB_WORKSPACE/incoming/"
-          if [[ "$STABLE_HAS_LITE" == true ]]; then
-            ./android/gradlew --project-dir android :app:assembleNightly -PsplitApks -Plite \
-              -I ../tests/android/build-identity.init.gradle verifyBuildIdentity
-            python3 _scripts/android_apks.py android/app/build/outputs/apk/nightly promotion-lite-apks --lite
-            cp promotion-lite-apks/*.apk "$GITHUB_WORKSPACE/incoming/"
-          fi
-
-      - name: Skip lite APKs without a Lite app ID
-        # Older lite APKs reused the full app IDs and version codes, so F-Droid
-        # would mix them into the full apps.
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'EOF'
-          from pathlib import Path
-          from fdroidserver import common
-
-          common.config = {}
-          for apk in sorted(Path("incoming").glob("*-lite*.apk")):
-              app_id = common.get_apk_id(str(apk))[0]
-              if not app_id.endswith(".lite"):
-                  print(f"::notice title=Skipped lite APK::{apk.name} uses {app_id}")
-                  apk.unlink()
-          EOF
+          name: apks
+          path: repo
 
       - name: Add stable release notes
         env:
-          STABLE_TAG: ${{ steps.release.outputs.stable_tag }}
+          GH_TOKEN: ${{ github.token }}
+          STABLE_TAG: ${{ needs.prepare.outputs.stable_tag }}
         shell: bash
         run: |
           set -euo pipefail
           # OpenTubeX commits F-Droid's "What's new" text to each stable release tag.
-          if ! notes="$(gh api --header 'Accept: application/vnd.github.raw' \
-            "repos/OpenTubeX/OpenTubeX/contents/fastlane/metadata/android/en-US/changelogs/default.txt?ref=${STABLE_TAG}")"; then
-            echo "::notice title=Stable release notes unavailable::${STABLE_TAG} has no F-Droid changelog"
-            exit 0
-          fi
-
+          notes="$(gh api --header 'Accept: application/vnd.github.raw' \
+            "repos/OpenTubeX/OpenTubeX/contents/fastlane/metadata/android/en-US/changelogs/default.txt?ref=${STABLE_TAG}")"
           for app_id in org.opentubex.app org.opentubex.app.lite; do
             mkdir -p "metadata/${app_id}/en-US/changelogs"
             printf '%s\n' "$notes" > "metadata/${app_id}/en-US/changelogs/default.txt"
           done
 
       - name: Add phone screenshots
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -282,6 +294,15 @@ jobs:
             mkdir -p "metadata/${app_id}/en-US/images/phoneScreenshots"
             cp "$screenshots"/* "metadata/${app_id}/en-US/images/phoneScreenshots/"
           done
+
+      - name: Keep the dates of published APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          # F-Droid reads the date each APK was added from the previous index.
+          curl --fail --silent --show-error --location --retry 3 \
+            --output "$RUNNER_TEMP/index-v2.json" https://fdroid.opentubex.org/repo/index-v2.json
+          mv "$RUNNER_TEMP/index-v2.json" repo/index-v2.json
 
       - name: Restore repository signing key
         env:
@@ -304,10 +325,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p repo site
-          find incoming -maxdepth 1 -type f -name '*.apk' -exec cp '{}' repo/ \;
-          fdroid update --pretty
+          fdroid update --pretty --nosign
+          python scripts/add-whats-new.py
+          fdroid signindex
           python scripts/check-app-icons.py
+          mkdir site
           cp --recursive static/. site/
           mv repo site/repo
 

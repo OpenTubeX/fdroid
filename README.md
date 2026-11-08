@@ -20,19 +20,27 @@ https://fdroid.opentubex.org/repo?fingerprint=99BCBB15868B41FE7263E409746D4ABCFC
 ## How publishing works
 
 Stable and nightly releases in `OpenTubeX/OpenTubeX` dispatch their exact tag
-to this repository. The publish workflow downloads any Android APKs for the
+to this repository. The publish workflow downloads the architecture APKs of the
 latest stable and nightly releases, builds a signed F-Droid index, and deploys
-the index with the landing page to GitHub Pages. When stable is newer than nightly,
-the workflow builds the stable tag with the nightly app ID and signing key, so
-existing nightly users receive the stable code without switching apps. Stable
-releases with lite APKs also promote OpenTubeX Nightly Lite this way. Explicit
-stable dispatches also promote that tag. The promoted APK is published directly
-in the signed F-Droid repository, without creating a GitHub release or adding
-extra assets to the application's stable release. Repository refreshes rebuild
-that APK until a newer nightly is published.
+the index with the landing page to GitHub Pages. F-Droid prefers architecture
+APKs over universal APKs, so the repository leaves the universal APKs out to stay
+below the 1 GB GitHub Pages limit.
+
+When the stable release has a higher version code than the latest nightly, the
+workflow builds the stable tag with the nightly app IDs and signing key, so
+existing OpenTubeX Nightly and Nightly Lite users receive the stable code
+without switching apps. The promoted APKs are published directly in the signed
+F-Droid repository, without creating a GitHub release or adding extra assets to
+the application's stable release. Repository refreshes rebuild them until a
+newer nightly is published. A separate job without repository secrets or Pages
+permissions downloads and builds the APKs.
 
 The APKs keep their original OpenTubeX signatures. F-Droid signs only the
-repository index, using a dedicated key stored in GitHub Actions secrets.
+repository index, using a dedicated key stored in GitHub Actions secrets. Each
+run seeds the previously published `index-v2.json` so F-Droid keeps the date
+each APK was first published. fdroidserver adds "What's new" to index-v2 only
+for apps built from source, so `scripts/add-whats-new.py` copies it there from
+index-v1 before the index is signed.
 
 The catalog icons live in `metadata/<package>/en-US/images/icon.png` because
 extracting icons from these APKs produces no usable catalog icon. The Lite
