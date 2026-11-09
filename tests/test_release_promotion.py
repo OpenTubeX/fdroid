@@ -25,6 +25,32 @@ def outputs_env(step_env, outputs):
 
 
 class ReleasePromotionTest(unittest.TestCase):
+    def test_promotion_provisions_native_build_dependencies(self):
+        steps = WORKFLOW["jobs"]["prepare"]["steps"]
+        checkout = step("prepare", "Check out OpenTubeX")
+        build = step("prepare", "Build stable code for nightly installations")
+        setup = next(item for item in steps
+                     if item.get("uses", "").startswith("android-actions/setup-android@"))
+        self.assertIn("ndk;28.2.13676358", setup["with"]["packages"].split())
+        go = next(item for item in steps if item.get("uses", "").startswith("actions/setup-go@"))
+        self.assertEqual(go["with"]["go-version-file"], "source/_scripts/cast-sender/go.mod")
+        self.assertFalse(go["with"]["cache"])
+        packer = step("prepare", "Install Android runtime packer")
+        self.assertIn("install --yes 7zip", packer["run"])
+        for dependency in (setup, go, packer):
+            self.assertEqual(dependency["if"], "steps.promotion.outputs.promote_stable == 'true'")
+            self.assertLess(steps.index(checkout), steps.index(dependency))
+            self.assertLess(steps.index(dependency), steps.index(build))
+
+    def test_android_setup_does_not_request_removed_tools_package(self):
+        setup = next(item for item in WORKFLOW["jobs"]["prepare"]["steps"]
+                     if item.get("uses", "").startswith("android-actions/setup-android@"))
+        # The pinned action defaults to "tools platform-tools", but Google
+        # no longer serves the legacy "tools" package.
+        packages = setup.get("with", {}).get("packages", "tools platform-tools").split()
+        self.assertNotIn("tools", packages)
+        self.assertIn("platform-tools", packages)
+
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
@@ -151,6 +177,7 @@ done
             self.assertEqual(len(gradle), 2)
             for invocation in gradle:
                 self.assertIn(":app:assembleNightly -PsplitApks", invocation)
+                self.assertNotIn(":app:assembleRelease", invocation)
                 self.assertTrue(invocation.endswith("|24691|0.35.0"), invocation)
             self.assertNotIn("-Plite", gradle[0])
             self.assertIn("-Plite", gradle[1])
