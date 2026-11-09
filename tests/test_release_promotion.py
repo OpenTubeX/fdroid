@@ -193,6 +193,29 @@ done
             for flavor in ("", "lite-") for abi in ABIS})
         self.assertTrue(self.promoted)
 
+        sign = step("publish", "Sign promoted APKs with the nightly key")
+        self.assertEqual(sign["if"], "needs.prepare.outputs.promote_stable == 'true'")
+        script = self.directory / "signing/_scripts/sign-nightly-apks.sh"
+        script.parent.mkdir(parents=True)
+        script.write_text('#!/bin/sh\nprintf "%s\\n" "$(cat "$ANDROID_NIGHTLY_KEYSTORE")" "$@" > signed.log\n')
+        script.chmod(0o755)
+        (self.directory / "incoming").rename(self.directory / "repo")
+        keystore = self.directory / "nightly-release.keystore"
+        env = dict(os.environ, ANDROID_NIGHTLY_KEYSTORE=str(keystore),
+                   ANDROID_NIGHTLY_KEYSTORE_BASE64="Zml4dHVyZQ==", ANDROID_NIGHTLY_STORE_PASSWORD="fixture")
+        self.run_step(sign, env, self.directory)
+        # Stable APKs keep the release key, and the private key leaves no copy behind.
+        keystore_contents, *signed = (self.directory / "signed.log").read_text().splitlines()
+        self.assertEqual(keystore_contents, "fixture")
+        self.assertEqual(set(signed), {f"repo/opentubex-0.35.0-android-{flavor}{abi}.apk"
+                                       for flavor in ("", "lite-") for abi in ABIS})
+        self.assertFalse(keystore.exists())
+        self.assertFalse((self.directory / "signing").exists())
+
+        unconfigured = subprocess.run(["bash", "-c", sign["run"]], cwd=self.directory, capture_output=True, text=True,
+                                      env=env | {"ANDROID_NIGHTLY_KEYSTORE_BASE64": ""})
+        self.assertNotEqual(unconfigured.returncode, 0)
+
     def test_newer_nightly_keeps_its_own_apks(self):
         self.nightly["commits"] = 12346
         self.assertEqual(self.prepare(self.nightly["tagName"]), self.expected_stable() | {

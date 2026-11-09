@@ -30,6 +30,7 @@ jobs:
       contents: read
     outputs:
       stable_tag: ${{ steps.release.outputs.stable_tag }}
+      promote_stable: ${{ steps.promotion.outputs.promote_stable }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -265,6 +266,40 @@ jobs:
           name: apks
           path: repo
 
+      - name: Check out the nightly signing script
+        if: needs.prepare.outputs.promote_stable == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OpenTubeX/OpenTubeX
+          ref: development
+          path: signing
+          sparse-checkout: |
+            _scripts/sign-nightly-apks.sh
+            android/nightly.keystore
+            android/nightly.lineage
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      # The stable tag's Gradle signs with the public nightly key. Nightly
+      # installations that rotated to the private key reject those APKs.
+      - name: Sign promoted APKs with the nightly key
+        if: needs.prepare.outputs.promote_stable == 'true'
+        env:
+          ANDROID_NIGHTLY_KEYSTORE_BASE64: ${{ secrets.ANDROID_NIGHTLY_KEYSTORE_BASE64 }}
+          ANDROID_NIGHTLY_STORE_PASSWORD: ${{ secrets.ANDROID_NIGHTLY_KEYSTORE_PASSWORD }}
+          ANDROID_NIGHTLY_KEYSTORE: ${{ runner.temp }}/nightly-release.keystore
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$ANDROID_NIGHTLY_KEYSTORE_BASE64" || -z "$ANDROID_NIGHTLY_STORE_PASSWORD" ]]; then
+            echo 'ANDROID_NIGHTLY_KEYSTORE_BASE64 and ANDROID_NIGHTLY_KEYSTORE_PASSWORD are not configured.' >&2
+            exit 1
+          fi
+          printf '%s' "$ANDROID_NIGHTLY_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_NIGHTLY_KEYSTORE"
+          chmod 600 "$ANDROID_NIGHTLY_KEYSTORE"
+          signing/_scripts/sign-nightly-apks.sh repo/opentubex-*-android-*.apk
+          rm -r "$ANDROID_NIGHTLY_KEYSTORE" signing
+
       - name: Add stable release notes
         env:
           GH_TOKEN: ${{ github.token }}
@@ -332,7 +367,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          fdroid update --pretty --nosign
+          python scripts/fdroid.py update --pretty --nosign
           python scripts/add-whats-new.py
           fdroid signindex
           python scripts/check-app-icons.py

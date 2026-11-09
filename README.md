@@ -27,15 +27,24 @@ APKs over universal APKs, so the repository leaves the universal APKs out to sta
 below the 1 GB GitHub Pages limit.
 
 When the stable release has a higher version code than the latest nightly, the
-workflow builds the stable tag with the nightly app IDs and signing key, so
-existing OpenTubeX Nightly and Nightly Lite users receive the stable code
-without switching apps. The promoted APKs are published directly in the signed
-F-Droid repository, without creating a GitHub release or adding extra assets to
-the application's stable release. Repository refreshes rebuild them until a
+workflow builds the stable tag with the nightly app IDs. The publish job then
+signs those APKs with the private nightly key, using the application's
+`_scripts/sign-nightly-apks.sh` from `development`, so existing OpenTubeX
+Nightly and Nightly Lite users receive the stable code without switching apps.
+The promoted APKs are published directly in the signed F-Droid repository,
+without creating a GitHub release or adding extra assets to the application's
+stable release. Repository refreshes rebuild them until a
 newer nightly is published. A separate job without repository secrets or Pages
 permissions downloads and builds the APKs.
 
-The APKs keep their original OpenTubeX signatures. F-Droid signs only the
+Nightly APKs carry the public nightly key in their v2 signature and the private
+key, rotated from it, in their v3 signature. fdroidserver skips APKs whose
+signatures have different certificates, so publishing runs it through
+`scripts/fdroid.py`, which lists the public certificate as the signer for exactly
+this pair. That is the certificate F-Droid clients read from rotated
+installations.
+
+The other APKs keep their original OpenTubeX signatures. F-Droid signs only the
 repository index, using a dedicated key stored in GitHub Actions secrets. Each
 run seeds the previously published `index-v2.json` so F-Droid keeps the date
 each APK was first published. fdroidserver adds "What's new" to index-v2 only
@@ -62,6 +71,8 @@ The repository expects these Actions secrets:
 
 - `FDROID_KEYSTORE_BASE64`, containing the base64-encoded PKCS#12 repository key
 - `FDROID_KEYSTORE_PASSWORD`, containing the password for that key
+- `ANDROID_NIGHTLY_KEYSTORE_BASE64` and `ANDROID_NIGHTLY_KEYSTORE_PASSWORD`,
+  containing the private OpenTubeX nightly key, as in the application repository
 
 Configure GitHub Pages to use GitHub Actions, set `fdroid.opentubex.org` as the
 custom domain, and add a DNS `CNAME` from that name to `opentubex.github.io`.
