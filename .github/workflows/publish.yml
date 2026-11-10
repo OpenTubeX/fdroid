@@ -379,36 +379,10 @@ jobs:
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
       - name: Upload repository
-        id: upload
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
 
-      # Pages names a deployment after its build version and skips one whose
-      # name is already deployed. actions/deploy-pages always uses the commit
-      # SHA, so a nightly dispatch without a new commit would publish nothing.
       - name: Deploy repository
         id: deployment
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          ARTIFACT_ID: ${{ steps.upload.outputs.artifact_id }}
-        with:
-          retries: 3
-          script: |
-            const { data: deployment } = await github.request('POST /repos/{owner}/{repo}/pages/deployments', {
-              ...context.repo,
-              artifact_id: Number(process.env.ARTIFACT_ID),
-              pages_build_version: `${context.sha}-${context.runId}-${process.env.GITHUB_RUN_ATTEMPT}`,
-              oidc_token: await core.getIDToken(),
-            })
-            const id = deployment.id ?? deployment.status_url.split('/').pop()
-            core.setOutput('page_url', deployment.page_url)
-            let status
-            do {
-              await new Promise(resolve => setTimeout(resolve, 5000))
-              ;({ data: { status } } = await github.request('GET /repos/{owner}/{repo}/pages/deployments/{id}', { ...context.repo, id }))
-              core.info(`Pages deployment ${id}: ${status}`)
-              if (['deployment_failed', 'deployment_content_failed', 'deployment_cancelled', 'deployment_lost'].includes(status)) {
-                throw new Error(`Pages deployment ${id} ended with ${status}`)
-              }
-            } while (status !== 'succeed')
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
